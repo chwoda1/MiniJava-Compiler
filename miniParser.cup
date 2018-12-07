@@ -1,0 +1,369 @@
+// Samuel Sedivy - sls195@pitt.edu - Project3a - 25 March 2018
+import java_cup.runtime.*;
+import syntaxtree.*;
+
+parser code
+{:
+    miniLexer lexer;
+    public miniParser(miniLexer lex) 
+    { 
+        super(lex); 
+        lexer = lex; 
+    }
+
+    public void syntax_error(Symbol sym) 
+    {
+	System.err.println("Parse error at line " + sym.left + ", column " + sym.right);
+    }
+
+:};
+
+scan with 
+{: 
+    return lexer.next_token(); 
+:};
+
+//Terminals returned from miniLexer
+terminal LBRACE, LBRACKET, LPAREN;
+terminal RBRACE, RBRACKET, RPAREN;
+terminal AND, EQUALS, LESSTHAN, MINUS, TIMES, BOOLEAN, PLUS, INT, FALSE, TRUE, NOT, CLASS, COMMA, DOT, ELSE;
+terminal MAIN, NEW,  PUBLIC, RETURN, EXTENDS, IF, SEMICOLON, STATIC, THIS, LENGTH, STRING, VOID, WHILE, PRINT;
+terminal Integer INTLITERAL;
+terminal String IDENTIFIER;
+
+//Non-terminals
+non terminal Program        goal;
+non terminal MainClass      mainClass;
+non terminal ClassDecl      classDecl;
+non terminal ClassDeclList  classDeclList;
+non terminal VarDecl        varDecl;
+non terminal VarDeclList    varDeclList;
+non terminal MethodDecl     methodDecl;
+non terminal MethodDeclList methodDeclList;
+non terminal FormalList     formalList;
+non terminal FormalList     moreFormalList;
+non terminal Type           type;
+non terminal Statement      statement;
+non terminal StatementList  statementList;
+non terminal Exp            expression;
+non terminal ExpList        expressionList;
+non terminal ExpList        moreExpressionList;
+non terminal Identifier     identifier;
+
+//Precedence rules
+precedence left AND;
+precedence left NOT;
+precedence left LESSTHAN;
+precedence left PLUS, MINUS;
+precedence left TIMES;
+precedence nonassoc DOT;
+
+//Grammar
+start with goal;
+
+goal ::=
+        mainClass:mc classDeclList:cdl
+        {: 
+            RESULT = new Program(mc, cdl); 
+        :}
+    ;
+
+mainClass ::=
+        CLASS identifier:classId LBRACE PUBLIC STATIC VOID MAIN LPAREN STRING LBRACKET RBRACKET identifier:argId RPAREN LBRACE statement:state RBRACE RBRACE
+        {: 
+            RESULT = new MainClass(classId, argId, state, classId.getLine(), classId.getColumn()); 
+        :}
+    ;
+
+classDeclList ::=
+        classDeclList:cdl classDecl:cd
+        {:  
+            cdl.addElement(cd);
+            if (cd != null)
+            {
+                cdl.setColumn(cd.getColumn());
+                cdl.setLine(cd.getLine());
+            }
+            RESULT = cdl; 
+        :}
+    |
+        {: 
+            RESULT = new ClassDeclList(); 
+        :}
+    ;
+
+classDecl ::=
+        CLASS identifier:id LBRACE varDeclList:vars methodDeclList:methods RBRACE
+        {: 
+            RESULT = new ClassDeclSimple(id, vars, methods, id.getLine(), id.getColumn()); 
+        :}
+    |   CLASS identifier:id EXTENDS identifier:parent LBRACE varDeclList:vars methodDeclList:methods RBRACE
+        {: 
+            RESULT = new ClassDeclExtends(id, parent, vars, methods, id.getLine(), id.getColumn()); 
+        :}
+    |   error:e RBRACE
+        
+    ;
+
+varDeclList ::=
+        varDeclList:vdl varDecl:vd
+        {: 
+            vdl.addElement(vd);
+            vdl.setColumn(vd.getColumn());
+            vdl.setLine(vd.getLine());
+            RESULT = vdl; 
+        :}
+    |
+        {: 
+            RESULT = new VarDeclList(); 
+        :}
+    ;
+
+varDecl ::=
+        type:ty identifier:id SEMICOLON
+        {: 
+            RESULT = new VarDecl(ty, id, ty.getLine(), ty.getColumn()); 
+        :}
+    |   type error:e SEMICOLON
+        
+    ;
+
+methodDeclList ::=
+        methodDecl:md methodDeclList:mdl
+        {: 
+            mdl.addFront(md);
+            mdl.setColumn(md.getColumn());
+            mdl.setLine(md.getLine());
+            RESULT = mdl; :}
+    |
+        {: 
+            RESULT = new MethodDeclList(); 
+        :}
+    ;
+
+methodDecl ::=
+        PUBLIC type:returnType identifier:id LPAREN formalList:args RPAREN LBRACE varDeclList:vars statementList:stateList RETURN expression:exp SEMICOLON RBRACE
+        {: 
+            RESULT = new MethodDecl(returnType, id, args, vars, stateList, exp, returnType.getLine(), returnType.getColumn()); 
+        :}
+    |
+        error:e RBRACE
+        
+    ;
+
+formalList ::=
+        type:ty identifier:id moreFormalList:list
+        {: 
+            list.addFront(new Formal(ty, id, ty.getLine(), ty.getColumn()));
+            list.setColumn(ty.getColumn());
+            list.setLine(ty.getLine());
+
+            RESULT = list; 
+        :}
+    |
+        {: 
+            RESULT = new FormalList(); 
+        :}
+    ;
+
+moreFormalList ::=
+        moreFormalList:mfl COMMA type:ty identifier:id
+        {: 
+            mfl.addElement(new Formal(ty, id, ty.getLine(), ty.getColumn()));
+            mfl.setColumn(ty.getColumn());
+            mfl.setLine(ty.getLine());
+            RESULT = mfl; 
+        :}
+    |
+        {: 
+            RESULT = new FormalList(); 
+        :}
+    ;
+
+type ::=
+        INT:i LBRACKET RBRACKET
+        {: 
+            RESULT = new IntArrayType(ileft, iright); 
+        :}
+
+    |   BOOLEAN:bool
+        {: 
+            RESULT = new BooleanType(boolleft, boolright); 
+        :}
+    |   INT:i
+        {: 
+            RESULT = new IntegerType(ileft, iright); 
+        :}
+    |   IDENTIFIER:id
+        {: 
+            RESULT = new IdentifierType(id, idleft, idright); 
+        :}
+    ;
+
+statementList ::=
+        statement:s statementList:sl
+        {:  
+            sl.addFront(s);
+            sl.setColumn(s.getColumn());
+            sl.setLine(s.getLine());
+            RESULT = sl; 
+        :}
+    |
+        {: 
+            RESULT = new StatementList(); 
+        :}
+    ;
+
+statement ::=
+        LBRACE statementList:list RBRACE
+        {: 
+            RESULT = new Block(list, list.getLine(), list.getColumn()); 
+        :}
+    |   IF:i LPAREN expression:e RPAREN statement:s1 ELSE statement:s2
+        {: 
+            RESULT = new If(e, s1, s2, ileft, iright); 
+        :}
+    |   WHILE:w LPAREN expression:exp RPAREN statement:s
+        {: 
+            RESULT = new While(exp, s, wleft, wright); 
+        :}
+    |   PRINT:p LPAREN expression:exp RPAREN SEMICOLON
+        {: 
+            RESULT = new Print(exp, pleft, pright); 
+        :}
+    |   identifier:id EQUALS:e expression:exp SEMICOLON
+        {: 
+            RESULT = new Assign(id, exp, idleft, idright); 
+        :}
+    |   identifier:id LBRACKET expression:exp RBRACKET EQUALS expression:rhs SEMICOLON
+        {: 
+            RESULT = new ArrayAssign(id, exp, rhs, idleft, idright); 
+        :}
+    |   error SEMICOLON
+        
+    ;
+
+expression ::=
+        expression:left AND:a expression:right
+        {: 
+            RESULT = new And(left, right, aleft, aright); 
+        :}
+    |
+        expression:left LESSTHAN:lt expression:right
+        {: 
+            RESULT = new LessThan(left, right, ltleft, ltright); 
+        :}
+    |
+        expression:left PLUS:p expression:right
+        {: 
+            RESULT = new Plus(left, right, pleft, pright); 
+        :}
+    |
+        expression:left MINUS:m expression:right
+        {: 
+            RESULT = new Minus(left, right, mleft, mright); 
+        :}
+    |
+        expression:left TIMES:t expression:right
+        {: 
+            RESULT = new Times(left, right, tleft, tright); 
+        :}
+    |
+        expression:e LBRACKET expression:exp RBRACKET
+        {: 
+            RESULT = new ArrayLookup(e, exp, eleft, eright); 
+        :}
+    |
+        expression:exp DOT:d LENGTH
+        {: 
+            RESULT = new ArrayLength(exp, dleft, dright); 
+        :}
+    |
+        expression:exp DOT:d identifier:id LPAREN expressionList:list RPAREN
+        {: 
+            RESULT = new Call(exp, id, list, dleft, dright); 
+        :}
+    |
+        expression:exp DOT:d identifier:id LPAREN error:e RPAREN
+        
+    |
+        INTLITERAL:i
+        {: 
+            RESULT = new IntegerLiteral(i, ileft, iright); 
+        :}
+    |
+        TRUE:t
+        {: 
+            RESULT = new True(tleft, tright); 
+        :}
+    |
+        FALSE:f
+        {: 
+            RESULT = new False(fleft, fright); 
+        :}
+    |
+        IDENTIFIER:id
+        {: 
+            RESULT = new IdentifierExp(id, idleft, idright); 
+        :}
+    |
+        THIS:t
+        {: 
+            RESULT = new This(tleft, tright); 
+        :}
+    |
+        NEW INT LBRACKET expression:exp RBRACKET
+        {: 
+            RESULT = new NewArray(exp, expleft, expright); 
+        :}
+    |
+        NEW identifier:i LPAREN RPAREN
+        {: 
+            RESULT = new NewObject(i, ileft, iright); 
+        :}
+    |
+        NOT expression:exp
+        {: 
+            RESULT = new Not(exp, expleft, expright); 
+        :}
+    |
+        LPAREN expression:exp RPAREN
+        {: 
+            RESULT = exp; 
+        :}
+    ;
+
+expressionList ::=
+        expression:exp moreExpressionList:more
+        {: 
+            more.addFront(exp);
+            more.setColumn(exp.getColumn());
+            more.setLine(exp.getLine());
+            RESULT = more; 
+        :}
+    |
+        {: 
+            RESULT = new ExpList(); 
+        :}
+    ;
+
+moreExpressionList ::=
+        moreExpressionList:more COMMA expression:exp
+        {: 
+            more.addElement(exp);
+            more.setColumn(exp.getColumn());
+            more.setLine(exp.getLine());
+            RESULT = more; 
+        :}
+    |
+        {:
+            RESULT = new ExpList(); 
+        :}
+    ;
+
+identifier ::=
+        IDENTIFIER:id
+        {: 
+            RESULT = new Identifier(id, idleft, idright); 
+        :}
+    ;
